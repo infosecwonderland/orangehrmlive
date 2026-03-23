@@ -4,5 +4,9 @@
       "username": "Admin",
       "password": "admin123"
     }
+  },
+  "employee": {
+    "firstName": "TestEmp",
+    "lastName": "Auto"
   }
 }
