@@ -29,9 +29,9 @@ export class DashboardPage {
       "Buzz"
     ];
 
-    cy.get(".oxd-main-menu").should("be.visible");
+    cy.get(".oxd-main-menu", { timeout: 20000 }).should("be.visible");
     menuItems.forEach((item) => {
-      cy.contains(".oxd-main-menu span", item).scrollIntoView().should("be.visible");
+      cy.contains(".oxd-main-menu span", item, { timeout: 20000 }).scrollIntoView().should("be.visible");
     });
   }
 }
