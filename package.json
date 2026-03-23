@@ -1,0 +1,32 @@
+{
+  "name": "orangehrmlive",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run",
+    "test": "cypress run",
+    "test:chrome": "cypress run --browser chrome --env allure=true",
+    "test:firefox": "cypress run --browser firefox --env allure=true",
+    "test:allure": "cypress run --env allure=true",
+    "test:parallel": "concurrently \"SPLIT=2 SPLIT_INDEX=0 cypress run --env allure=true\" \"SPLIT=2 SPLIT_INDEX=1 cypress run --env allure=true\"",
+    "allure:report": "allure generate allure-results --clean -o allure-report",
+    "allure:open": "allure open allure-report",
+    "allure:serve": "allure serve allure-results"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@shelex/cypress-allure-plugin": "^2.41.2",
+    "@types/node": "^25.5.0",
+    "allure-commandline": "^2.38.1",
+    "concurrently": "^9.2.1",
+    "cypress": "^15.12.0",
+    "cypress-split": "^1.24.31",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
