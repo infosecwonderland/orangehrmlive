@@ -2,13 +2,13 @@ name: CI
 
 on:
   push:
-    branches: 
+    branches:
       - main
       - "**/feature/**"
 
 jobs:
-  test:
-    name: Cypress Tests (${{ matrix.browser }})
+  test-ui:
+    name: UI Tests (${{ matrix.browser }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -41,8 +41,32 @@ jobs:
         env:
           CYPRESS_allure: true
 
+      - name: Upload UI allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-ui-${{ matrix.browser }}
+          path: allure-results/
+          if-no-files-found: ignore
+
+  test-api:
+    name: API Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Run API tests
-        if: matrix.browser == 'chrome'
         uses: cypress-io/github-action@v6
         with:
           install: false
@@ -51,18 +75,18 @@ jobs:
         env:
           CYPRESS_allure: true
 
-      - name: Upload allure results
+      - name: Upload API allure results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results-${{ matrix.browser }}
+          name: allure-results-api
           path: allure-results/
           if-no-files-found: ignore
 
   allure-report:
     name: Allure Report
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test-ui, test-api]
     if: always()
 
     steps:
@@ -78,17 +102,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download Chrome results
+      - name: Download UI results (chrome)
         uses: actions/download-artifact@v4
         with:
-          name: allure-results-chrome
+          name: allure-results-ui-chrome
           path: allure-results/
         continue-on-error: true
 
-      - name: Download Firefox results
+      - name: Download UI results (firefox)
         uses: actions/download-artifact@v4
         with:
-          name: allure-results-firefox
+          name: allure-results-ui-firefox
+          path: allure-results/
+        continue-on-error: true
+
+      - name: Download API results
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results-api
           path: allure-results/
         continue-on-error: true
 
