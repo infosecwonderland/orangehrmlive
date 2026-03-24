@@ -5,3 +5,6 @@ cypress/videos/
 cypress/screenshots/
 STATUS.md
 Playwright Assignment OrangeHRM.docx
+
+# Local scratch spec — not part of shared test suite
+cypress/e2e/integrity/test-employ.ui.cy.ts

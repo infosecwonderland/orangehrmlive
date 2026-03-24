@@ -7,9 +7,13 @@ export default defineConfig({
     baseUrl: "https://opensource-demo.orangehrmlive.com",
     supportFile: "cypress/support/e2e.ts",
     specPattern: "cypress/e2e/**/*.cy.ts",
+    env: {
+      allure: true,
+      allureResultsPath: "allure-results",
+    },
     setupNodeEvents(on, config) {
       cypressSplit(on, config);
-      config.env.allureResultsPath = "allure-results";
+      config.env.allureResultsPath = config.env.allureResultsPath ?? "allure-results";
       allureCypress(on, config);
       return config;
     },

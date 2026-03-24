@@ -1,7 +1,8 @@
 export class DashboardPage {
+  /** Logged-in shell: URL + user menu (heading text “Dashboard” can render late on a slow demo). */
   assertLoaded(): void {
-    cy.url({ timeout: 30000 }).should("include", "/dashboard");
-    cy.contains("Dashboard", { timeout: 30000 }).should("be.visible");
+    cy.url({ timeout: 60000 }).should("include", "dashboard");
+    cy.get(".oxd-userdropdown-tab", { timeout: 30000 }).should("be.visible");
   }
 
   openUserMenu(): void {

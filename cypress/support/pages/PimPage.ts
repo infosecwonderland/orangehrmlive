@@ -18,11 +18,13 @@ export class PimPage {
   }
 
   submitEmployeeForm(): void {
+    cy.intercept("POST", "**/api/v2/pim/employees").as("createEmployee");
     cy.contains("button", "Save").click();
+    cy.wait("@createEmployee", { timeout: 15000 });
   }
 
   assertEmployeeLoaded(): void {
-    cy.url().should("include", "/pim/viewPersonalDetails/empNumber/", { timeout: 15000 });
+    cy.url({ timeout: 15000 }).should("include", "/pim/viewPersonalDetails/empNumber/");
   }
 
   getEmployeeIdFromUrl(): Cypress.Chainable<number> {
