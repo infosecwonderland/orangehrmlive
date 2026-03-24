@@ -22,9 +22,10 @@ export interface LeaveEntitlement {
   fromDate: string;
   toDate: string;
   creditedDate: string;
-  leaveBalance: { entitled: number; used: number; scheduled: number; pending: number; notLinked: number; taken: number; balance: number; adjustment: number };
-  daysLeft: number;
-  noOfDays: number;
+  entitlement: number;   // total allocation
+  daysUsed: number;      // days already approved/used
+  deleted: boolean;
+  deletable: boolean;
   leaveType: { id: number; name: string; deleted: boolean };
   employee: { empNumber: number; firstName: string; middleName: string; lastName: string; terminationId: number | null };
 }
@@ -63,7 +64,7 @@ export const leaveApiClient = {
     return cy.request({
       method: "POST",
       url: "/web/index.php/api/v2/leave/leave-types",
-      body: { name },
+      body: { name, operational: true },
       failOnStatusCode: false,
     });
   },
@@ -115,11 +116,16 @@ export const leaveApiClient = {
 
   getEntitlements(
     empNumber: number,
-    leaveTypeId: number
+    leaveTypeId: number,
+    fromDate?: string,
+    toDate?: string
   ): Cypress.Chainable<Cypress.Response<{ data: LeaveEntitlement[] }>> {
+    const year = new Date().getFullYear();
+    const from = fromDate ?? `${year}-01-01`;
+    const to = toDate ?? `${year}-12-31`;
     return cy.request({
       method: "GET",
-      url: `/web/index.php/api/v2/leave/leave-entitlements?empNumber=${empNumber}&leaveTypeId=${leaveTypeId}&limit=50&offset=0`,
+      url: `/web/index.php/api/v2/leave/leave-entitlements?empNumber=${empNumber}&leaveTypeId=${leaveTypeId}&fromDate=${from}&toDate=${to}&limit=50&offset=0`,
       failOnStatusCode: false,
     });
   },
@@ -136,11 +142,16 @@ export const leaveApiClient = {
   },
 
   getLeaveRequests(
-    empNumber: number
+    empNumber: number,
+    fromDate?: string,
+    toDate?: string
   ): Cypress.Chainable<Cypress.Response<{ data: LeaveRequest[]; meta: { total: number } }>> {
+    const year = new Date().getFullYear();
+    const from = fromDate ?? `${year}-01-01`;
+    const to = toDate ?? `${year + 1}-12-31`;
     return cy.request({
       method: "GET",
-      url: `/web/index.php/api/v2/leave/leave-requests?empNumber=${empNumber}&limit=50&offset=0`,
+      url: `/web/index.php/api/v2/leave/leave-requests?empNumber=${empNumber}&fromDate=${from}&toDate=${to}&limit=50&offset=0`,
       failOnStatusCode: false,
     });
   },
