@@ -37,7 +37,7 @@ jobs:
         with:
           install: false
           browser: ${{ matrix.browser }}
-          config: specPattern=cypress/e2e/**/*.cy.ts,excludeSpecPattern=cypress/e2e/**/*.api.cy.ts,cypress/e2e/performance/**
+          config: 'specPattern=cypress/e2e/**/*.cy.ts,excludeSpecPattern=["cypress/e2e/**/*.api.cy.ts","cypress/e2e/performance/**"]'
         env:
           CYPRESS_allure: true
 
