@@ -18,6 +18,8 @@ export default defineConfig({
   screenshotOnRunFailure: true,
   defaultCommandTimeout: 10000,
   pageLoadTimeout: 60000,
+  responseTimeout: 60000,
+  requestTimeout: 60000,
   retries: {
     runMode: 1,
     openMode: 0,
