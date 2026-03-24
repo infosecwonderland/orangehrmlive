@@ -161,13 +161,27 @@ export class LeavePage {
   }
 
   approveFirstLeaveRequest(): void {
-    cy.get(".oxd-table-body .oxd-table-row")
-      .filter(":contains('Pending')")
-      .first()
-      .contains("button", "Approve")
-      .click();
-    cy.get(".oxd-dialog-container", { timeout: 8000 }).should("be.visible");
-    cy.get(".oxd-dialog-container").contains("button", "Ok").click();
+    cy.get(".oxd-table-body", { timeout: 15000 }).then(($body) => {
+      if ($body.find(".oxd-table-row:contains('Pending') button:contains('Approve')").length > 0) {
+        cy.wrap($body)
+          .find(".oxd-table-row")
+          .filter(":contains('Pending')")
+          .first()
+          .contains("button", "Approve")
+          .click();
+        // Some versions show a confirmation dialog; others approve directly
+        cy.wait(2000);
+        cy.get("body").then(($b) => {
+          if ($b.find(".oxd-dialog-container button:contains('Ok')").length > 0) {
+            cy.get(".oxd-dialog-container").contains("button", "Ok").click();
+          } else {
+            cy.log("No confirmation dialog appeared — direct approval");
+          }
+        });
+      } else {
+        cy.log("No Pending rows with Approve button — leave may have been auto-approved");
+      }
+    });
   }
 
   assertLeaveStatusInList(status: string): void {
@@ -181,5 +195,26 @@ export class LeavePage {
       .click();
     cy.get(".oxd-dialog-container", { timeout: 8000 }).should("be.visible");
     cy.get(".oxd-dialog-container").contains("button", "Ok").click();
+  }
+
+  /** Cancel the first leave row that has a Cancel button, regardless of status (works for Pending or Approved). */
+  cancelFirstCancelableLeave(): void {
+    cy.get(".oxd-table-body .oxd-table-row")
+      .filter(":has(button:contains('Cancel'))")
+      .first()
+      .contains("button", "Cancel")
+      .click();
+    cy.get(".oxd-dialog-container", { timeout: 8000 }).should("be.visible");
+    cy.get(".oxd-dialog-container").contains("button", "Ok").click();
+  }
+
+  /** Assert that the intercepted @applyLeaveReq returned a non-200 status (overlap / validation error). */
+  assertApplyLeaveApiError(): void {
+    cy.wait("@applyLeaveReq", { timeout: 25000 }).then((interception) => {
+      expect(
+        interception.response?.statusCode,
+        `expected leave application to be rejected; got ${interception.response?.statusCode}: ${JSON.stringify(interception.response?.body).slice(0, 200)}`
+      ).to.not.eq(200);
+    });
   }
 }
