@@ -37,6 +37,34 @@ export interface CreateEmployeeRequest {
   middleName?: string;
 }
 
+export interface ContactDetailsRequest {
+  street1?: string;
+  street2?: string;
+  city?: string;
+  province?: string;
+  zipCode?: string;
+  countryCode?: string;
+  homeTelephone?: string;
+  workTelephone?: string;
+  mobile?: string;
+  workEmail?: string;
+  otherEmail?: string;
+}
+
+export interface ContactDetailsResponse {
+  street1: string | null;
+  street2: string | null;
+  city: string | null;
+  province: string | null;
+  zipCode: string | null;
+  countryCode: string | null;
+  homeTelephone: string | null;
+  workTelephone: string | null;
+  mobile: string | null;
+  workEmail: string | null;
+  otherEmail: string | null;
+}
+
 export const pimApiClient = {
   createEmployee(
     body: CreateEmployeeRequest
@@ -83,6 +111,28 @@ export const pimApiClient = {
     return cy.request({
       method: "PUT",
       url: `/web/index.php/api/v2/pim/employees/${empNumber}/personal-details`,
+      body,
+      failOnStatusCode: false,
+    });
+  },
+
+  getContactDetails(
+    empNumber: number
+  ): Cypress.Chainable<Cypress.Response<{ data: ContactDetailsResponse }>> {
+    return cy.request({
+      method: "GET",
+      url: `/web/index.php/api/v2/pim/employees/${empNumber}/contact-details`,
+      failOnStatusCode: false,
+    });
+  },
+
+  updateContactDetails(
+    empNumber: number,
+    body: ContactDetailsRequest
+  ): Cypress.Chainable<Cypress.Response<{ data: ContactDetailsResponse }>> {
+    return cy.request({
+      method: "PUT",
+      url: `/web/index.php/api/v2/pim/employees/${empNumber}/contact-details`,
       body,
       failOnStatusCode: false,
     });

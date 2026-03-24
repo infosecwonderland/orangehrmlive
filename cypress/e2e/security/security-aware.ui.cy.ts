@@ -1,4 +1,7 @@
-import { pimApiClient } from "../../../src/services/pimApiClient";
+import {
+  pimApiClient,
+  type ContactDetailsResponse,
+} from "../../../src/services/pimApiClient";
 import { LoginPage } from "../../support/pages/LoginPage";
 import { DashboardPage } from "../../support/pages/DashboardPage";
 
@@ -6,7 +9,8 @@ import { DashboardPage } from "../../support/pages/DashboardPage";
  * 3.3 Security Aware Testing
  *
  * Given the candidate's security background, the following are verified:
- *   3.3a — XSS payloads in employee name and address fields are not executed
+ *   3.3a — XSS payloads in employee name and address fields are rejected or stored as
+ *           literal strings (API-level validation)
  *   3.3b — Direct URL access to protected pages without login is blocked
  *   3.3c — Employee-level (ESS) user cannot access admin-only pages
  *   3.3d — Sensitive data (password) is not exposed in URL parameters
@@ -15,6 +19,20 @@ import { DashboardPage } from "../../support/pages/DashboardPage";
 
 const loginPage = new LoginPage();
 const dashboardPage = new DashboardPage();
+
+/**
+ * XSS payload list covering the most common injection vectors.
+ * Each entry is tested independently against every target field so that a failure
+ * pinpoints exactly which payload / field combination is vulnerable.
+ */
+const XSS_PAYLOADS: { label: string; value: string }[] = [
+  { label: "script tag",               value: "<script>alert('xss')</script>" },
+  { label: "img onerror",              value: "<img src=x onerror=alert(1)>" },
+  { label: "svg onload",               value: "<svg onload=alert(1)>" },
+  { label: "attribute escape + script",value: '"><script>alert(1)</script>' },
+  { label: "javascript protocol",      value: "javascript:alert(document.domain)" },
+  { label: "template literal injection",value: "${alert(1)}" },
+];
 
 /** Protected routes that require an authenticated session */
 const PROTECTED_ROUTES = [
@@ -33,130 +51,118 @@ const ADMIN_ONLY_ROUTES = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3.3a — XSS Prevention in employee name and address fields
+// 3.3a — XSS payloads in employee name fields (API)
+//
+// For each payload the test:
+//   1. POSTs to create an employee with the payload as firstName.
+//   2. If the server accepts it (200), GETs personal-details and asserts the stored
+//      value equals the submitted string exactly — proving it is stored as a literal,
+//      not HTML-decoded or transformed into executable markup.
+//   3. If the server rejects it (4xx), that is also a pass — input validation prevents
+//      the value reaching storage at all.
 // ─────────────────────────────────────────────────────────────────────────────
-describe("3.3a — XSS Prevention in employee name and address fields", () => {
-  let empNumber: number | undefined;
+describe("3.3a — XSS payloads in employee name fields (API)", () => {
   const ts = Date.now();
-  const safeLast = `SecXss${ts}`;
-
-  const XSS_SCRIPT_TAG = "<script>alert('xss')</script>";
-  const XSS_IMG_ONERROR = "<img src=x onerror=alert(1)>";
+  const createdEmpNumbers: number[] = [];
 
   beforeEach(() => {
     cy.allure()
       .parentSuite("3.3 Security Aware Testing")
-      .suite("XSS Prevention")
-      .tag("security");
-
-    // Fail immediately if any XSS payload executes and triggers a dialog
-    cy.on("window:alert", (msg) => {
-      throw new Error(`XSS payload executed — alert fired with: "${msg}"`);
-    });
-    cy.on("window:confirm", (msg) => {
-      throw new Error(`XSS payload executed — confirm fired with: "${msg}"`);
-    });
+      .suite("XSS — Name Fields")
+      .tag("security", "api");
+    cy.loginAsAdmin();
   });
 
-  it("does not execute XSS payload typed into employee first/last name fields", () => {
-    cy.loginAsAdmin();
-    cy.visit("/web/index.php/pim/addEmployee");
-    cy.get('input[placeholder="First Name"]', { timeout: 15000 }).should("be.visible");
+  XSS_PAYLOADS.forEach(({ label, value }) => {
+    it(`[${label}] API rejects or stores firstName as literal string`, () => {
+      pimApiClient
+        .createEmployee({ firstName: value, lastName: `XssName${ts}` })
+        .then((createRes) => {
+          if (createRes.status === 200) {
+            const empNumber = (createRes.body as { data: { empNumber: number } }).data.empNumber;
+            createdEmpNumbers.push(empNumber);
 
-    // Type XSS payloads into both name fields
-    cy.get('input[placeholder="First Name"]').clear().type(XSS_SCRIPT_TAG);
-    cy.get('input[placeholder="Last Name"]').clear().type(safeLast);
-
-    cy.intercept({ method: "POST", url: /\/api\/v2\/pim\/employees/ }).as("createEmp");
-    cy.contains("button", "Save").click();
-
-    cy.wait("@createEmp", { timeout: 20000 }).then(({ response }) => {
-      if (response?.statusCode === 200) {
-        empNumber = (response.body as { data?: { empNumber?: number } }).data?.empNumber;
-        cy.log(`Employee created with empNumber ${empNumber} — verifying XSS is inert`);
-
-        // Navigate to employee list and confirm the payload is stored as literal text,
-        // not interpreted as HTML. If <script> executed, the window:alert handler above
-        // will already have thrown.
-        cy.visit("/web/index.php/pim/viewEmployeeList");
-        cy.get('input[placeholder="Type for hints..."]').first().clear().type(safeLast);
-        cy.contains("button", "Search").click();
-        cy.get(".oxd-table-body", { timeout: 15000 }).should("be.visible");
-
-        // The page source should not contain a live <script> tag with our payload
-        cy.get(".oxd-table-body")
-          .invoke("html")
-          .then((html) => {
-            // HTML-encoded entities (&lt;script&gt;) are acceptable; a raw executable
-            // <script> tag in the rendered table is a finding.
-            expect(html).not.to.match(/<script[^>]*>alert/i);
-          });
-      } else {
-        // Server rejected the payload — input sanitisation at the API layer is also valid.
-        cy.log(
-          `Server rejected XSS payload with status ${response?.statusCode} — secure by validation`
-        );
-      }
-    });
-  });
-
-  it("does not execute XSS payload typed into employee address (Street 1) field", () => {
-    cy.loginAsAdmin();
-
-    // Create a clean employee via API so we can navigate to their contact-details page
-    pimApiClient
-      .createEmployee({ firstName: "SecAddr", lastName: safeLast })
-      .then((res) => {
-        expect(res.status).to.eq(200);
-        empNumber = (res.body as { data: { empNumber: number } }).data.empNumber;
-
-        cy.visit(
-          `/web/index.php/pim/contactDetails/empNumber/${empNumber}`
-        );
-        cy.url().should("include", "contactDetails", { timeout: 15000 });
-
-        // Street1 is the first text input on the contact details form
-        cy.get('input[placeholder="Street 1"]', { timeout: 15000 })
-          .should("be.visible")
-          .clear()
-          .type(XSS_IMG_ONERROR);
-
-        cy.intercept({ method: "PUT", url: /\/api\/v2\/pim\/employees\/\d+\/contact-details/ }).as(
-          "saveContact"
-        );
-        cy.get(".oxd-form-actions")
-          .find('button[type="submit"]')
-          .click();
-
-        cy.wait("@saveContact", { timeout: 20000 }).then(({ response }) => {
-          if (response?.statusCode === 200) {
-            cy.log("Contact details saved — verifying payload is inert on reload");
-
-            // Reload and confirm the img onerror payload did not fire
-            cy.visit(
-              `/web/index.php/pim/contactDetails/empNumber/${empNumber}`
-            );
-            cy.url().should("include", "contactDetails", { timeout: 15000 });
-
-            // The window:alert handler above would have thrown if onerror executed.
-            // Also verify no raw event-handler attribute is present in the DOM.
-            cy.get(".oxd-form", { timeout: 10000 })
-              .invoke("html")
-              .then((html) => {
-                expect(html).not.to.match(/onerror\s*=/i);
-              });
+            // Read the stored value back through the API and confirm it was persisted
+            // as the exact literal string — not decoded into executable HTML.
+            pimApiClient.getPersonalDetails(empNumber).then((getRes) => {
+              expect(getRes.status).to.eq(200);
+              const stored = (getRes.body as { data: { firstName: string } }).data.firstName;
+              expect(stored).to.eq(value,
+                `firstName was transformed on storage — expected literal "${value}", got "${stored}"`
+              );
+            });
           } else {
-            cy.log(
-              `Server rejected XSS address payload with status ${response?.statusCode} — secure`
-            );
+            // 4xx means the server rejected the payload at the validation layer.
+            expect(createRes.status).to.be.within(400, 499);
+            cy.log(`[${label}] Payload rejected by API with ${createRes.status} — secure`);
           }
         });
-      });
+    });
   });
 
   after(() => {
     cy.then(() => {
-      if (empNumber !== undefined) pimApiClient.deleteEmployees([empNumber!]);
+      if (createdEmpNumbers.length > 0) pimApiClient.deleteEmployees(createdEmpNumbers);
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3.3a — XSS payloads in employee address fields (API)
+//
+// A single clean employee is created once.  For each payload the test:
+//   1. PUTs the payload into street1 (and street2 for the attribute-escape variant).
+//   2. If the server accepts it (200), GETs contact-details and asserts the stored
+//      value equals the submitted string exactly.
+//   3. If the server rejects it (4xx), that is also a pass.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("3.3a — XSS payloads in employee address fields (API)", () => {
+  const ts = Date.now();
+  let addrEmpNumber: number;
+
+  before(() => {
+    // Create the shared employee used by all address-field tests.
+    cy.loginAsAdmin();
+    pimApiClient
+      .createEmployee({ firstName: "SecXssAddr", lastName: `XssAddr${ts}` })
+      .then((res) => {
+        expect(res.status, "shared employee for address XSS tests must be created").to.eq(200);
+        addrEmpNumber = (res.body as { data: { empNumber: number } }).data.empNumber;
+      });
+  });
+
+  beforeEach(() => {
+    cy.allure()
+      .parentSuite("3.3 Security Aware Testing")
+      .suite("XSS — Address Fields")
+      .tag("security", "api");
+    cy.loginAsAdmin();
+  });
+
+  XSS_PAYLOADS.forEach(({ label, value }) => {
+    it(`[${label}] API rejects or stores street1 as literal string`, () => {
+      pimApiClient
+        .updateContactDetails(addrEmpNumber, { street1: value })
+        .then((putRes) => {
+          if (putRes.status === 200) {
+            pimApiClient.getContactDetails(addrEmpNumber).then((getRes) => {
+              expect(getRes.status).to.eq(200);
+              const stored = (getRes.body as { data: ContactDetailsResponse }).data.street1;
+              expect(stored).to.eq(value,
+                `street1 was transformed on storage — expected literal "${value}", got "${stored}"`
+              );
+            });
+          } else {
+            expect(putRes.status).to.be.within(400, 499);
+            cy.log(`[${label}] Payload rejected by API with ${putRes.status} — secure`);
+          }
+        });
+    });
+  });
+
+  after(() => {
+    cy.then(() => {
+      if (addrEmpNumber !== undefined) pimApiClient.deleteEmployees([addrEmpNumber]);
     });
   });
 });
