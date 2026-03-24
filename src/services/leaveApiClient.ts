@@ -64,7 +64,7 @@ export const leaveApiClient = {
     return cy.request({
       method: "POST",
       url: "/web/index.php/api/v2/leave/leave-types",
-      body: { name, operational: true },
+      body: { name, situational: false },
       failOnStatusCode: false,
     });
   },

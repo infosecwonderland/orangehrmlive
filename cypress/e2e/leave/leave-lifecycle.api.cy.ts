@@ -141,14 +141,22 @@ describe("2.1 Leave Lifecycle — API", () => {
     cy.loginAsAdmin();
   });
 
-  // ── Test 1: leave types list accessible ──────────────────────────────────
-  it("admin can retrieve the leave types list via API", () => {
-    leaveApiClient.getLeaveTypes().then((res) => {
-      expect(res.status).to.eq(200);
-      const types = (res.body as { data: LeaveType[] }).data;
-      expect(types, "leave types list should be non-empty").to.have.length.greaterThan(0);
-      const target = types.find((t) => t.id === leaveTypeId);
-      expect(target, `leave type id=${leaveTypeId} should appear in types list`).to.exist;
+  // ── Test 1: admin creates a new leave type ───────────────────────────────
+  it("admin creates a new leave type", () => {
+    const newTypeName = `APICreate-${Date.now()}`;
+    leaveApiClient.createLeaveType(newTypeName).then((res) => {
+      expect(res.status, `createLeaveType: ${JSON.stringify(res.body)}`).to.eq(200);
+      const created = (res.body as { data: LeaveType }).data;
+      expect(created.name, "returned name should match").to.eq(newTypeName);
+      expect(created.id, "created type should have a valid id").to.be.greaterThan(0);
+
+      leaveApiClient.getLeaveTypes().then((listRes) => {
+        expect(listRes.status).to.eq(200);
+        const types = (listRes.body as { data: LeaveType[] }).data;
+        const found = types.find((t) => t.id === created.id);
+        expect(found, `new leave type id=${created.id} must appear in list`).to.exist;
+        leaveApiClient.deleteLeaveType(created.id);
+      });
     });
   });
 
