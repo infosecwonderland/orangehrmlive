@@ -164,6 +164,17 @@ export class SystemUsersPage {
     cy.contains("button", "Save").click();
   }
 
+  /** Register before Save — success is asserted on API (toast may disappear too fast or not render). */
+  listenForCreateUserApi(): void {
+    cy.intercept({ method: "POST", url: /\/api\/v2\/admin\/users/ }).as("createSysUser");
+  }
+
+  assertCreateUserApiSuccess(): void {
+    cy.wait("@createSysUser", { timeout: 25000 }).then(({ response }) => {
+      expect(response?.statusCode, JSON.stringify(response?.body)).to.eq(200);
+    });
+  }
+
   cancel(): void {
     cy.contains("button", "Cancel").click();
   }

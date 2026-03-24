@@ -17,6 +17,8 @@ const dashboardPage = new DashboardPage();
 Cypress.Commands.add("login", (username: string, password: string) => {
   loginPage.visit();
   loginPage.login(username, password);
+  // Demo can be slow after submit; wait for navigation before callers assert on the shell UI.
+  cy.url({ timeout: 60000 }).should("include", "dashboard");
 });
 
 Cypress.Commands.add("loginAsAdmin", () => {

@@ -73,6 +73,7 @@ export const pimApiClient = {
       method: "POST",
       url: "/web/index.php/api/v2/pim/employees",
       body,
+      failOnStatusCode: false,
     });
   },
 

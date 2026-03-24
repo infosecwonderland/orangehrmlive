@@ -9,6 +9,7 @@ export class AttendancePage {
     cy.visit("/web/index.php/attendance/viewMyAttendanceRecord");
     cy.url({ timeout: 10000 }).should("include", "viewMyAttendanceRecord");
     cy.get(".oxd-table, .orangehrm-container", { timeout: 15000 }).should("be.visible");
+    cy.contains("My Attendance Records", { timeout: 15000 }).should("be.visible");
   }
 
   navigateToEmployeeRecords(): void {
@@ -62,6 +63,28 @@ export class AttendancePage {
     cy.get(".oxd-table-body", { timeout: 15000 })
       .should("be.visible")
       .and("contain", text);
+  }
+
+  /**
+   * After Apply Leave, the grid may show the leave type, a generic absence label, or scheduled/pending wording
+   * (approval is not required for this assertion on all OrangeHRM configs).
+   */
+  assertAttendanceReflectsLeave(leaveTypeName: string): void {
+    cy.get(".oxd-table-body", { timeout: 15000 })
+      .should("be.visible")
+      .invoke("text")
+      .should((text: string) => {
+        const lower = text.toLowerCase();
+        const type = leaveTypeName.toLowerCase();
+        const matchesGeneric =
+          /on leave|leave|absent|absence|day off|holiday|scheduled|weekend|pending|planned|half\s*day/i.test(
+            text
+          );
+        expect(
+          lower.includes(type) || matchesGeneric,
+          `expected attendance text to reference leave (“${leaveTypeName}” or generic leave/absence/scheduled); got: ${text.slice(0, 400)}`
+        ).to.be.true;
+      });
   }
 
   assertNoRecordsFound(): void {

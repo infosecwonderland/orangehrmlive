@@ -6,7 +6,7 @@ describe("Auth and Navigation", () => {
   const dashboardPage = new DashboardPage();
 
   beforeEach(() => {
-    loginPage.visit();
+    return loginPage.visit();
   });
 
   it("logs in with valid credentials and loads dashboard", () => {

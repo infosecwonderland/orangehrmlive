@@ -5,6 +5,17 @@ export interface LeaveType {
   operational: boolean;
 }
 
+/**
+ * Demo / tenant APIs may return leave types with `operational: false` for every row while the
+ * Apply Leave UI still offers them. Prefer operational + not deleted, else first non-deleted.
+ */
+export function pickLeaveTypeForTest(types: LeaveType[] | undefined | null): LeaveType | undefined {
+  if (!Array.isArray(types) || types.length === 0) return undefined;
+  const active = types.filter((t) => !t.deleted);
+  if (active.length === 0) return undefined;
+  return active.find((t) => t.operational === true) ?? active[0];
+}
+
 export interface LeaveEntitlement {
   id: number;
   entitlementType: { id: number; name: string };
@@ -61,6 +72,14 @@ export const leaveApiClient = {
     return cy.request({
       method: "GET",
       url: "/web/index.php/api/v2/leave/leave-types?limit=50&offset=0",
+    });
+  },
+
+  /** Types the logged-in user may select on Apply Leave (subset of all leave types). */
+  getEligibleLeaveTypes(): Cypress.Chainable<Cypress.Response<{ data: LeaveType[] }>> {
+    return cy.request({
+      method: "GET",
+      url: "/web/index.php/api/v2/leave/leave-types/eligible",
     });
   },
 
@@ -169,25 +188,3 @@ export const leaveApiClient = {
     });
   },
 };
-
-/**
- * Returns the next N weekdays (Mon–Fri) starting at least `minDaysOut` days
- * from today, formatted as YYYY-MM-DD.
- */
-export function getWeekdays(count: number, minDaysOut = 7): string[] {
-  const dates: string[] = [];
-  const cursor = new Date();
-  cursor.setDate(cursor.getDate() + minDaysOut);
-
-  while (dates.length < count) {
-    const day = cursor.getDay(); // 0=Sun, 6=Sat
-    if (day !== 0 && day !== 6) {
-      const yyyy = cursor.getFullYear();
-      const mm = String(cursor.getMonth() + 1).padStart(2, "0");
-      const dd = String(cursor.getDate()).padStart(2, "0");
-      dates.push(`${yyyy}-${mm}-${dd}`);
-    }
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return dates;
-}

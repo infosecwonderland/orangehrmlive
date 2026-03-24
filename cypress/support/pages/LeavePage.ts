@@ -5,8 +5,16 @@ export class LeavePage {
   }
 
   openApplyLeave(): void {
+    // Apply Leave mounts with a spinner until eligible types + workweek (and related) XHRs finish;
+    // clicking the Leave Type select before then fails (element covered / not ready).
+    cy.intercept({ method: "GET", url: /\/api\/v2\/leave\/leave-types\/eligible/ }).as("applyLeaveEligible");
+    cy.intercept({ method: "GET", url: /\/api\/v2\/leave\/workweek/ }).as("applyLeaveWorkweek");
     cy.contains(".oxd-topbar-body-nav a", "Apply").click();
-    cy.url({ timeout: 10000 }).should("include", "/applyLeave");
+    cy.url({ timeout: 15000 }).should("include", "/applyLeave");
+    cy.wait("@applyLeaveEligible", { timeout: 40000 });
+    cy.wait("@applyLeaveWorkweek", { timeout: 40000 });
+    cy.get(".oxd-form", { timeout: 20000 }).should("be.visible");
+    cy.get(".oxd-form .oxd-select-text").first().should("be.visible");
   }
 
   openLeaveList(): void {
@@ -78,10 +86,17 @@ export class LeavePage {
   }
 
   selectLeaveType(leaveTypeName: string): void {
-    cy.get(".oxd-form .oxd-select-text").first().click();
+    cy.get(".oxd-form", { timeout: 30000 }).should("be.visible");
+    cy.get(".oxd-form .oxd-select-text")
+      .first()
+      .scrollIntoView()
+      .should("be.visible")
+      .click();
     cy.contains(".oxd-select-dropdown .oxd-select-option", leaveTypeName, {
-      timeout: 10000,
-    }).click();
+      timeout: 20000,
+    })
+      .should("be.visible")
+      .click();
   }
 
   setFromDate(date: string): void {
@@ -97,6 +112,35 @@ export class LeavePage {
 
   submitLeaveApplication(): void {
     cy.contains("button", "Apply").click();
+  }
+
+  /** Call before submit — Apply Leave success is asserted on API (toast is unreliable on slow demo). */
+  listenForApplyLeaveApi(): void {
+    cy.intercept({ method: "POST", url: /\/api\/v2\/leave\/leave-requests/ }).as("applyLeaveReq");
+  }
+
+  assertApplyLeaveApiSuccess(): void {
+    cy.wait("@applyLeaveReq", { timeout: 25000 }).its("response.statusCode").should("eq", 200);
+  }
+
+  /** After {@link listenForApplyLeaveApi} + {@link submitLeaveApplication}: assert 200 and return new request id (avoids flaky GET /leave-requests on some tenants). */
+  captureApplyLeaveRequestId(): Cypress.Chainable<number> {
+    return cy.wait("@applyLeaveReq", { timeout: 25000 }).then((interception) => {
+      expect(interception.response?.statusCode, JSON.stringify(interception.response?.body)).to.eq(200);
+      const raw = interception.response?.body;
+      const data = raw && typeof raw === "object" ? (raw as { data?: unknown }).data : undefined;
+      let id: number | undefined;
+      if (data && typeof data === "object" && data !== null) {
+        const d = data as Record<string, unknown>;
+        if (typeof d.id === "number") id = d.id;
+        else if (d.leaveRequest && typeof d.leaveRequest === "object") {
+          const inner = (d.leaveRequest as Record<string, unknown>).id;
+          if (typeof inner === "number") id = inner;
+        }
+      }
+      expect(id, JSON.stringify(raw)).to.be.a("number");
+      return cy.wrap(id as number);
+    });
   }
 
   assertSuccessToast(): void {
