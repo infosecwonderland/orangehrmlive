@@ -43,11 +43,11 @@ const PROTECTED_ROUTES = [
   "/web/index.php/time/viewEmployeeTimesheet",
 ];
 
-/** Admin-only routes that ESS users must not access */
-const ADMIN_ONLY_ROUTES = [
-  "/web/index.php/admin/viewSystemUsers",
-  "/web/index.php/admin/viewOrganizationGeneralInformation",
-  "/web/index.php/admin/viewPayGrades",
+/** Admin-only API endpoints that ESS users must not be able to read */
+const ADMIN_ONLY_API_ENDPOINTS = [
+  { label: "System Users",                    path: "/web/index.php/api/v2/admin/users?limit=1&offset=0" },
+  { label: "Job Titles",                       path: "/web/index.php/api/v2/admin/job-titles?limit=1&offset=0" },
+  { label: "Pay Grades",                       path: "/web/index.php/api/v2/admin/pay-grades?limit=1&offset=0" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -192,50 +192,120 @@ describe("3.3b — Unauthenticated direct URL access is blocked", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3.3c — ESS user cannot access admin-only pages
+// 3.3c — ESS user cannot access admin-only pages (API-level)
+//
+// All interactions are via cy.request (no UI).  A throwaway ESS user is created
+// in before() and destroyed in after() so the test is self-contained.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("3.3c — ESS user cannot access admin-only pages", () => {
+  const ts = Date.now();
+  const essUsername = `EssTest${ts}`;
+  const essPassword = "EssTest1!";
+  let essEmpNumber: number;
+  let essUserId: number;
+
+  /**
+   * Programmatic login via cy.request.
+   * Reads the CSRF token from the login page (handles both attribute orderings)
+   * then POSTs credentials to the validate endpoint.
+   */
+  function apiLogin(username: string, password: string): void {
+    cy.request({ url: "/web/index.php/auth/login", failOnStatusCode: false }).then((pageRes) => {
+      // Match <input ... name="_csrf_token" ... value="TOKEN"> in either attribute order
+      const html = pageRes.body as string;
+      const m =
+        html.match(/<input[^>]+name="_csrf_token"[^>]+value="([^"]+)"/) ||
+        html.match(/<input[^>]+value="([^"]+)"[^>]+name="_csrf_token"/);
+      const csrf = m ? m[1] : "";
+      cy.request({
+        method: "POST",
+        url: "/web/index.php/auth/validate",
+        form: true,
+        body: { _username: username, _password: password, _csrf_token: csrf },
+        followRedirect: true,
+        failOnStatusCode: false,
+      });
+    });
+  }
+
+  before(() => {
+    // Create a throwaway employee + ESS system user via the admin API.
+    // Use UI-based admin login here — runs once, reliability trumps speed.
+    cy.loginAsAdmin();
+    pimApiClient
+      .createEmployee({ firstName: "EssTest", lastName: `User${ts}` })
+      .then((res) => {
+        expect(res.status, "ESS employee creation").to.eq(200);
+        essEmpNumber = (res.body as { data: { empNumber: number } }).data.empNumber;
+
+        cy.request({
+          method: "POST",
+          url: "/web/index.php/api/v2/admin/users",
+          body: {
+            userRoleId: 2, // 2 = ESS
+            empNumber: essEmpNumber,
+            status: true,
+            username: essUsername,
+            password: essPassword,
+          },
+          failOnStatusCode: false,
+        }).then((userRes) => {
+          expect(userRes.status, "ESS system-user creation").to.eq(200);
+          essUserId = (userRes.body as { data: { id: number } }).data.id;
+        });
+      });
+  });
+
+  after(() => {
+    cy.loginAsAdmin();
+    cy.then(() => {
+      if (essUserId !== undefined) {
+        cy.request({
+          method: "DELETE",
+          url: "/web/index.php/api/v2/admin/users",
+          body: { ids: [essUserId] },
+          failOnStatusCode: false,
+        });
+      }
+      if (essEmpNumber !== undefined) {
+        pimApiClient.deleteEmployees([essEmpNumber]);
+      }
+    });
+  });
+
   beforeEach(() => {
     cy.allure()
       .parentSuite("3.3 Security Aware Testing")
       .suite("Authorisation — ESS vs Admin")
       .tag("security");
 
-    // Login as the ESS (employee self-service) user before each test
-    cy.fixture("testData").then(
-      (testData: { credentials: { ess: { username: string; password: string } } }) => {
-        const { username, password } = testData.credentials.ess;
-        cy.login(username, password);
-        cy.url({ timeout: 20000 }).should("not.include", "/admin");
-      }
-    );
+    // Establish ESS session via API — no UI interaction.
+    apiLogin(essUsername, essPassword);
   });
 
-  ADMIN_ONLY_ROUTES.forEach((route) => {
-    it(`ESS user is denied access to admin route — ${route}`, () => {
-      cy.visit(route, { failOnStatusCode: false });
-
-      // Access is blocked if the app redirects away from the admin route OR shows an
-      // access-denied / 403 indicator.  Remaining on the admin page is a finding.
-      cy.url({ timeout: 10000 }).then((currentUrl) => {
-        const isOnAdminRoute = currentUrl.includes(route.split("/web/index.php")[1]);
-        if (isOnAdminRoute) {
-          // The URL stayed — the page body must show an access-denied message
-          cy.get("body").then(($body) => {
-            const bodyText = $body.text().toLowerCase();
-            const accessDenied =
-              bodyText.includes("forbidden") ||
-              bodyText.includes("access denied") ||
-              bodyText.includes("unauthorized") ||
-              bodyText.includes("403");
-            expect(
-              accessDenied,
-              `ESS user reached admin page ${route} without an access-denied indicator`
-            ).to.be.true;
-          });
+  ADMIN_ONLY_API_ENDPOINTS.forEach(({ label, path }) => {
+    it(`ESS user is denied access to admin API — ${label}`, () => {
+      cy.request({
+        method: "GET",
+        url: path,
+        failOnStatusCode: false,
+        followRedirect: false,
+      }).then((res) => {
+        // 401/403 or any redirect are all acceptable — the ESS session must not
+        // receive a 200 response containing actual admin data.
+        if (res.status === 200) {
+          const body = typeof res.body === "string" ? res.body : JSON.stringify(res.body);
+          const hasAdminData = body.includes('"data"') && !body.includes('"auth/login"');
+          expect(
+            hasAdminData,
+            `ESS user received admin data from ${path} — authorization bypass detected`
+          ).to.be.false;
         } else {
-          // Redirected away — correct behaviour
-          cy.log(`ESS user was redirected away from ${route} — correct authorisation`);
+          const isBlocked =
+            res.status === 401 ||
+            res.status === 403 ||
+            (res.status >= 300 && res.status < 400);
+          expect(isBlocked, `Expected 401/403/3xx but got ${res.status} for ${path}`).to.be.true;
         }
       });
     });
