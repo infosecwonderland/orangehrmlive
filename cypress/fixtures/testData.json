@@ -3,6 +3,10 @@
     "admin": {
       "username": "Admin",
       "password": "admin123"
+    },
+    "ess": {
+      "username": "TestEmp",
+      "password": "TestEmp123"
     }
   },
   "employee": {

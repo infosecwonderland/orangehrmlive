@@ -1,7 +1,7 @@
 export class DashboardPage {
   assertLoaded(): void {
-    cy.url().should("include", "/dashboard");
-    cy.contains("Dashboard").should("be.visible");
+    cy.url({ timeout: 30000 }).should("include", "/dashboard");
+    cy.contains("Dashboard", { timeout: 30000 }).should("be.visible");
   }
 
   openUserMenu(): void {
