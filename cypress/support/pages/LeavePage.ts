@@ -118,6 +118,7 @@ export class LeavePage {
 
   approveFirstLeaveRequest(): void {
     cy.get(".oxd-table-body .oxd-table-row")
+      .filter(":contains('Pending')")
       .first()
       .contains("button", "Approve")
       .click();

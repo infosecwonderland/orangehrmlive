@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - "**/feature/**"
+  pull_request:
+    branches:
+      - main
 
 jobs:
   test-ui:
@@ -39,7 +42,8 @@ jobs:
           browser: ${{ matrix.browser }}
           config: 'specPattern=cypress/e2e/**/*.cy.ts,excludeSpecPattern=["cypress/e2e/**/*.api.cy.ts","cypress/e2e/performance/**"]'
         env:
-          CYPRESS_allure: true
+          # Allure is also enabled by default in cypress.config.ts (env.allure)
+          CYPRESS_allure: "true"
 
       - name: Upload UI allure results
         if: always()
@@ -73,7 +77,7 @@ jobs:
           browser: chrome
           config: specPattern=cypress/e2e/**/*.api.cy.ts
         env:
-          CYPRESS_allure: true
+          CYPRESS_allure: "true"
 
       - name: Upload API allure results
         if: always()
@@ -108,7 +112,7 @@ jobs:
           browser: chrome
           config: specPattern=cypress/e2e/performance/performance.cy.ts
         env:
-          CYPRESS_allure: true
+          CYPRESS_allure: "true"
 
       - name: Upload performance allure results
         if: always()
@@ -127,6 +131,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -166,9 +176,19 @@ jobs:
         continue-on-error: true
 
       - name: Generate Allure report
-        run: npm run allure:report
+        shell: bash
+        run: |
+          mkdir -p allure-results
+          if find allure-results -type f -name '*.json' 2>/dev/null | grep -q .; then
+            npm run allure:report
+          else
+            echo "::warning::No Allure JSON files in allure-results — creating placeholder report"
+            mkdir -p allure-report
+            printf '%s\n' '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Allure</title></head><body><p>No Allure result files were collected. Check Cypress jobs and <code>allure-results</code> uploads.</p></body></html>' > allure-report/index.html
+          fi
 
       - name: Upload Allure report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: allure-report

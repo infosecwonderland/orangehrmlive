@@ -6,7 +6,7 @@
   "scripts": {
     "cypress:open": "cypress open",
     "cypress:run": "cypress run",
-    "test": "cypress run",
+    "test": "cypress run --env allure=true",
     "test:chrome": "cypress run --browser chrome --env allure=true",
     "test:firefox": "cypress run --browser firefox --env allure=true",
     "test:allure": "cypress run --env allure=true",
