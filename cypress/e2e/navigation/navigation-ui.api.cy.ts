@@ -16,6 +16,10 @@ describe("Navigation and UI Validation API", () => {
   });
 
   beforeEach(() => {
+    cy.allure()
+      .parentSuite("1.3 Navigation")
+      .suite("API")
+      .tag("navigation", "api");
     apiClient.authenticate({ username: adminUsername, password: adminPassword });
   });
 

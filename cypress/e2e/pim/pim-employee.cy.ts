@@ -23,6 +23,10 @@ describe("PIM - Employee Management", () => {
   });
 
   beforeEach(() => {
+    cy.allure()
+      .parentSuite("2.3 PIM Employee Management")
+      .suite("UI")
+      .tag("pim", "ui");
     cy.loginAsAdmin();
     pimPage.openModule();
   });

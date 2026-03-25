@@ -16,6 +16,10 @@ describe("Auth API", () => {
   });
 
   beforeEach(() => {
+    cy.allure()
+      .parentSuite("1.1 Authentication")
+      .suite("API")
+      .tag("auth", "api");
     cy.clearCookies();
   });
 

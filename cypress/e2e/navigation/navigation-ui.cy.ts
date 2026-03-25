@@ -4,6 +4,10 @@ const dashboardPage = new DashboardPage();
 
 describe("Navigation and UI Validation", () => {
   beforeEach(() => {
+    cy.allure()
+      .parentSuite("1.3 Navigation")
+      .suite("UI")
+      .tag("navigation", "ui");
     cy.loginAsAdmin();
   });
 
