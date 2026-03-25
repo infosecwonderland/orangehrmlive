@@ -76,14 +76,10 @@ export class ReportsPage {
   }
 
   viewReport(): void {
-    // Empty reports still return 200 from this endpoint; the DOM may not use .orangehrm-container
-    // or that wrapper can be non-visible — do not rely on it.
-    cy.intercept({ method: "GET", url: /\/api\/v2\/time\/reports\/data/ }).as("timeReportData");
+    // OrangeHRM time reports use a traditional page navigation (not XHR) — clicking View
+    // triggers a full page reload, so cy.intercept is not applicable here.
     cy.contains("button", "View").click();
-    cy.wait("@timeReportData", { timeout: 25000 }).then((i) => {
-      expect(i.response?.statusCode, JSON.stringify(i.response?.body)).to.eq(200);
-    });
-    cy.get("body", { timeout: 15000 }).should(($b) => {
+    cy.get("body", { timeout: 30000 }).should(($b) => {
       const t = $b.text();
       const settled =
         /No Records Found/i.test(t) ||

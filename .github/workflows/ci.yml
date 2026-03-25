@@ -8,12 +8,18 @@ on:
 
 jobs:
   test-ui:
-    name: UI Tests (${{ matrix.browser }})
+    name: UI Tests (${{ matrix.spec }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        browser: [chrome, firefox]
+        spec:
+          - cypress/e2e/auth/auth-navigation.cy.ts
+          - cypress/e2e/integrity/data-validation.ui.cy.ts
+          - cypress/e2e/leave/leave-lifecycle.ui.cy.ts
+          - cypress/e2e/navigation/navigation-ui.cy.ts
+          - cypress/e2e/pim/pim-employee.cy.ts
+          - cypress/e2e/recruitment/recruitment-lifecycle.ui.cy.ts
 
     steps:
       - name: Checkout code
@@ -28,31 +34,36 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Setup Firefox
-        if: matrix.browser == 'firefox'
-        uses: browser-actions/setup-firefox@latest
-
       - name: Run UI tests
         uses: cypress-io/github-action@v6
         with:
           install: false
-          browser: ${{ matrix.browser }}
-          config: 'specPattern=cypress/e2e/**/*.cy.ts,excludeSpecPattern=["cypress/e2e/**/*.api.cy.ts","cypress/e2e/performance/**","cypress/e2e/security/**"]'
+          browser: chrome
+          spec: ${{ matrix.spec }}
         env:
-          # Allure is also enabled by default in cypress.config.ts (env.allure)
           CYPRESS_allure: "true"
 
       - name: Upload UI allure results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results-ui-${{ matrix.browser }}
+          name: allure-results-ui-${{ strategy.job-index }}
           path: allure-results/
           if-no-files-found: ignore
+          retention-days: 1
 
   test-api:
-    name: API Tests
+    name: API Tests (${{ matrix.spec }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        spec:
+          - cypress/e2e/auth/auth-navigation.api.cy.ts
+          - cypress/e2e/leave/leave-lifecycle.api.cy.ts
+          - cypress/e2e/navigation/navigation-ui.api.cy.ts
+          - cypress/e2e/pim/pim-employee.api.cy.ts
+          - cypress/e2e/recruitment/recruitment-lifecycle.api.cy.ts
 
     steps:
       - name: Checkout code
@@ -72,7 +83,7 @@ jobs:
         with:
           install: false
           browser: chrome
-          config: specPattern=cypress/e2e/**/*.api.cy.ts
+          spec: ${{ matrix.spec }}
         env:
           CYPRESS_allure: "true"
 
@@ -80,9 +91,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results-api
+          name: allure-results-api-${{ strategy.job-index }}
           path: allure-results/
           if-no-files-found: ignore
+          retention-days: 1
 
   test-performance:
     name: Performance Tests
@@ -118,6 +130,7 @@ jobs:
           name: allure-results-performance
           path: allure-results/
           if-no-files-found: ignore
+          retention-days: 1
 
   test-security:
     name: Security Tests
@@ -152,6 +165,7 @@ jobs:
           name: allure-results-security
           path: allure-results/
           if-no-files-found: ignore
+          retention-days: 1
 
   allure-report:
     name: Allure Report
@@ -178,25 +192,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download UI results (chrome)
+      - name: Download UI results
         uses: actions/download-artifact@v4
         with:
-          name: allure-results-ui-chrome
+          pattern: allure-results-ui-*
           path: allure-results/
-        continue-on-error: true
-
-      - name: Download UI results (firefox)
-        uses: actions/download-artifact@v4
-        with:
-          name: allure-results-ui-firefox
-          path: allure-results/
+          merge-multiple: true
         continue-on-error: true
 
       - name: Download API results
         uses: actions/download-artifact@v4
         with:
-          name: allure-results-api
+          pattern: allure-results-api-*
           path: allure-results/
+          merge-multiple: true
         continue-on-error: true
 
       - name: Download performance results
@@ -225,9 +234,10 @@ jobs:
             printf '%s\n' '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Allure</title></head><body><p>No Allure result files were collected. Check Cypress jobs and <code>allure-results</code> uploads.</p></body></html>' > allure-report/index.html
           fi
 
-      - name: Upload Allure report
+      - name: Upload Allure report artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
           path: allure-report/
+

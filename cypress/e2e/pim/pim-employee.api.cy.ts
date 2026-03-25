@@ -30,6 +30,10 @@ describe("PIM Employee Management API", () => {
   });
 
   beforeEach(() => {
+    cy.allure()
+      .parentSuite("2.3 PIM Employee Management")
+      .suite("API")
+      .tag("pim", "api");
     apiClient.authenticate({ username: adminUsername, password: adminPassword });
   });
 

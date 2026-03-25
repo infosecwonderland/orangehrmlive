@@ -6,6 +6,10 @@ describe("Auth and Navigation", () => {
   const dashboardPage = new DashboardPage();
 
   beforeEach(() => {
+    cy.allure()
+      .parentSuite("1.1 Authentication")
+      .suite("UI")
+      .tag("auth", "ui");
     return loginPage.visit();
   });
 
