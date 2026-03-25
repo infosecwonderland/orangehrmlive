@@ -87,10 +87,26 @@ describe("2.2 Recruitment Lifecycle — API", () => {
 
     recruitmentApiClient.getJobTitles().then((jtRes) => {
       expect(jtRes.status, `getJobTitles: ${bodyStr(jtRes.body)}`).to.eq(200);
-      const titles = (jtRes.body as { data: JobTitle[] }).data;
+      const titles = ((jtRes.body as { data: JobTitle[] }).data) ?? [];
       const active = titles.find((t) => !t.isDeleted) ?? titles[0];
-      jobTitleId = active.id;
-      cy.log(`Job title: "${active.title}" id=${jobTitleId}`);
+      if (active) {
+        jobTitleId = active.id;
+        cy.log(`Job title: "${active.title}" id=${jobTitleId}`);
+      } else {
+        // Demo server has no job titles (reset or deleted) — create one as fallback
+        cy.log("No job titles found — creating fallback job title");
+        return cy.request({
+          method: "POST",
+          url: "/web/index.php/api/v2/admin/job-titles",
+          body: { title: `AutoTitle-${Date.now()}`, description: "", note: "" },
+          failOnStatusCode: false,
+        }).then((createRes) => {
+          expect(createRes.status, `create job title fallback: ${bodyStr(createRes.body)}`).to.eq(200);
+          const created = (createRes.body as { data: JobTitle }).data;
+          jobTitleId = created.id;
+          cy.log(`Job title created (fallback): "${created.title}" id=${jobTitleId}`);
+        });
+      }
 
     }).then(() => {
       return cy.request({

@@ -71,11 +71,28 @@ describe("2.2 Recruitment Lifecycle — UI", () => {
 
     recruitmentApiClient.getJobTitles().then((jtRes) => {
       expect(jtRes.status).to.eq(200);
-      const titles = (jtRes.body as { data: JobTitle[] }).data;
+      const titles = ((jtRes.body as { data: JobTitle[] }).data) ?? [];
       const active = titles.find((t) => !t.isDeleted) ?? titles[0];
-      jobTitleId = active.id;
-      jobTitleName = active.title;
-      cy.log(`Job title: "${jobTitleName}" id=${jobTitleId}`);
+      if (active) {
+        jobTitleId = active.id;
+        jobTitleName = active.title;
+        cy.log(`Job title: "${jobTitleName}" id=${jobTitleId}`);
+      } else {
+        // Demo server has no job titles (reset or deleted) — create one as fallback
+        cy.log("No job titles found — creating fallback job title");
+        return cy.request({
+          method: "POST",
+          url: "/web/index.php/api/v2/admin/job-titles",
+          body: { title: `AutoTitle-${Date.now()}`, description: "", note: "" },
+          failOnStatusCode: false,
+        }).then((createRes) => {
+          expect(createRes.status, `create job title fallback: ${JSON.stringify(createRes.body).slice(0, 200)}`).to.eq(200);
+          const created = (createRes.body as { data: JobTitle }).data;
+          jobTitleId = created.id;
+          jobTitleName = created.title;
+          cy.log(`Job title created (fallback): "${jobTitleName}" id=${jobTitleId}`);
+        });
+      }
 
     }).then(() => {
       // Try the dedicated hiring-managers endpoint first; fall back to any PIM employee
