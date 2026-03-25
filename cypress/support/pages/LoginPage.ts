@@ -1,6 +1,8 @@
 export class LoginPage {
   visit(): void {
-    cy.visit("/web/index.php/auth/login");
+    // failOnStatusCode: false lets Cypress continue on transient 5xx responses
+    // so the retry mechanism can recover rather than hard-failing immediately.
+    cy.visit("/web/index.php/auth/login", { failOnStatusCode: false });
   }
 
   fillUsername(username: string): void {

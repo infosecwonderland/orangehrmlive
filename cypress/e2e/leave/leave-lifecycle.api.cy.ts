@@ -130,7 +130,8 @@ describe("2.1 Leave Lifecycle — API", () => {
     });
   });
 
-  // Re-establish admin session before each test
+  // Re-establish admin session before each test using API login (no UI navigation)
+  // to avoid the 60-second URL dashboard timeout when the demo server is slow.
   beforeEach(() => {
     cy.allure()
       .parentSuite("2.1 Leave Lifecycle")
@@ -138,7 +139,7 @@ describe("2.1 Leave Lifecycle — API", () => {
       .tag("leave", "api");
 
     cy.clearCookies();
-    cy.loginAsAdmin();
+    apiLoginAsAdmin();
   });
 
   // ── Test 1: admin creates a new leave type ───────────────────────────────

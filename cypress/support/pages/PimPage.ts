@@ -36,7 +36,9 @@ export class PimPage {
   }
 
   searchByEmployeeName(employeeName: string): void {
-    cy.get('input[placeholder="Type for hints..."]').first().clear().type(employeeName);
+    cy.get('input[placeholder="Type for hints..."]').first().clear().type(employeeName.slice(0, 3), { delay: 60 });
+    cy.get(".oxd-autocomplete-dropdown", { timeout: 12000 }).should("be.visible");
+    cy.contains(".oxd-autocomplete-option", employeeName, { timeout: 20000 }).click();
     cy.contains("button", "Search").click();
     cy.get(".oxd-table-body", { timeout: 15000 }).should("be.visible");
   }
