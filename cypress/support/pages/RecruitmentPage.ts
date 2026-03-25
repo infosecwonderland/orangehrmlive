@@ -12,7 +12,7 @@ export class RecruitmentPage {
 
   openCandidates(): void {
     cy.contains(".oxd-topbar-body-nav a", "Candidates").click();
-    cy.url({ timeout: 10000 }).should("include", "/viewCandidates");
+    cy.url({ timeout: 20000 }).should("include", "/viewCandidates");
   }
 
   // ── Vacancies ───────────────────────────────────────────────────────────────

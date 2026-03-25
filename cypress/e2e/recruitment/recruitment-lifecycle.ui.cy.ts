@@ -273,12 +273,12 @@ describe("2.2 Recruitment Lifecycle — UI", () => {
 
   // ── Test 6: advance through full workflow to hired ─────────────────────────
   // OrangeHRM demo workflow from INTERVIEW_SCHEDULED:
-  //   Click "Mark Interview Passed" → navigates to Offer Job form (status: INTERVIEW_PASSED)
-  //   Save Offer Job form → status: JOB_OFFERED (no toast, navigates instead)
-  //   Navigate to candidate page → click "Hire" → status: HIRED
+  //   Click "Mark Interview Passed" → save form (INTERVIEW_PASSED)
+  //   Click "Offer Job" → save form (JOB_OFFERED)
+  //   Click "Hire" → HIRED
   //
-  // Uses API to check state first, then cy.contains(..., {timeout}) to wait for
-  // the button to render (avoids one-shot DOM snapshot via .then() catching a loading state).
+  // All UI steps (including Hire) are kept inside a single cy.wrap().then() block
+  // so Cypress guarantees sequential execution before the verify step.
   it("the shortlisted candidate is moved to hired status", () => {
     cy.wrap(null).then(() => { shortlistedCandidateId = candidateIds[0]; });
 
@@ -288,11 +288,8 @@ describe("2.2 Recruitment Lifecycle — UI", () => {
         const s = candidateStatusStr(c.status).toUpperCase();
         cy.log(`Pre-hire status: "${s}"`);
 
-        const isScheduled = s.includes("SCHEDULED");
-        const isPassed    = s.includes("PASSED");
-
-        if (isScheduled) {
-          // INTERVIEW_SCHEDULED → Mark Interview Passed → Offer Job → Hire UI
+        if (s.includes("SCHEDULED")) {
+          // INTERVIEW_SCHEDULED → Mark Interview Passed → Offer Job → Hire
           cy.visit(`/web/index.php/recruitment/addCandidate/${shortlistedCandidateId}`);
           cy.contains("button", "Mark Interview Passed", { timeout: 30000 }).should("be.visible").click();
           cy.get(".oxd-form", { timeout: 15000 }).should("be.visible");
@@ -302,27 +299,32 @@ describe("2.2 Recruitment Lifecycle — UI", () => {
           cy.contains("button", "Offer Job", { timeout: 30000 }).should("be.visible").click();
           cy.get(".oxd-form", { timeout: 15000 }).should("be.visible");
           cy.contains("button", "Save", { timeout: 10000 }).click();
-        } else if (isPassed) {
-          // INTERVIEW_PASSED → Offer Job → Hire UI
+        } else if (s.includes("PASSED")) {
+          // INTERVIEW_PASSED → Offer Job → Hire
           cy.visit(`/web/index.php/recruitment/addCandidate/${shortlistedCandidateId}`);
           cy.contains("button", "Offer Job", { timeout: 30000 }).should("be.visible").click();
           cy.get(".oxd-form", { timeout: 15000 }).should("be.visible");
           cy.contains("button", "Save", { timeout: 10000 }).click();
         }
-        // If already JOB_OFFERED: fall through to Hire button below
-      });
-    });
+        // If already JOB_OFFERED: fall through to Hire
 
-    // Navigate fresh to candidate page then hire via UI
-    cy.visit(`/web/index.php/recruitment/addCandidate/${shortlistedCandidateId}`);
-    cy.contains("button", "Hire", { timeout: 30000 }).should("be.visible").click();
-    cy.wait(1500);
-    cy.get("body").then(($b) => {
-      if ($b.find(".oxd-dialog-container").length > 0) {
-        cy.get(".oxd-dialog-container").contains("button", "Ok").click();
-      } else if ($b.find("button").filter((_, el) => (el.textContent?.trim() ?? "") === "Save").length > 0) {
-        cy.contains("button", "Save").click();
-      }
+        // Hire step (always runs inside the same .then, after state is advanced)
+        cy.visit(`/web/index.php/recruitment/addCandidate/${shortlistedCandidateId}`);
+        cy.contains("button", "Hire", { timeout: 30000 }).should("be.visible").click();
+        // Wait for the confirmation dialog to appear (up to 15s) then click Ok
+        cy.get("body", { timeout: 15000 }).should(($b) => {
+          const hasDialog = $b.find(".oxd-dialog-container").length > 0;
+          const hasSave = $b.find("button").filter((_, el) => (el.textContent?.trim() ?? "") === "Save").length > 0;
+          expect(hasDialog || hasSave, "Hire should produce a confirmation dialog or save form").to.be.true;
+        });
+        cy.get("body").then(($b) => {
+          if ($b.find(".oxd-dialog-container").length > 0) {
+            cy.get(".oxd-dialog-container").contains("button", "Ok").click();
+          } else {
+            cy.contains("button", "Save").click();
+          }
+        });
+      });
     });
 
     // Verify hired status via API
