@@ -148,21 +148,20 @@ export class RecruitmentPage {
       .clear()
       .type(interviewTitle);
 
-    // Interviewer autocomplete (required field) — wait for results, then pick first
+    // Interviewer autocomplete (required field)
     cy.contains(".oxd-input-group", "Interviewer")
       .find('input[placeholder="Type for hints..."]')
       .clear()
       .type("e", { delay: 60 });
-    cy.get(".oxd-autocomplete-dropdown", { timeout: 15000 }).should("be.visible");
-    // Wait for the async search to complete before clicking
-    cy.wait(2000);
-    cy.get(".oxd-autocomplete-dropdown").children().first().click();
+    cy.get(".oxd-autocomplete-dropdown", { timeout: 20000 }).should("be.visible");
+    cy.wait(1500);
+    cy.get(".oxd-autocomplete-option", { timeout: 10000 }).first().click();
 
     // Date field (OrangeHRM date picker accepts YYYY-DD-MM)
     const [yyyy, mm, dd] = date.split("-");
     cy.get(".oxd-date-input input").first().clear().type(`${yyyy}-${dd}-${mm}`, { delay: 60 }).blur();
 
     cy.contains("button", "Save").click();
-    cy.get(".oxd-toast", { timeout: 20000 }).should("contain", "Successfully");
+    cy.get(".oxd-toast", { timeout: 30000 }).should("contain", "Successfully");
   }
 }
