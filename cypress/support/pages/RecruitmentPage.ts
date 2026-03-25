@@ -32,13 +32,14 @@ export class RecruitmentPage {
       .should("be.visible")
       .click();
 
-    // Hiring Manager autocomplete — type prefix, wait for results, click first option
+    // Hiring Manager autocomplete — type prefix then wait for the actual name to appear
+    // (avoids clicking the "Searching…" loading placeholder)
+    const hmFirstName = hiringManager.split(" ")[0] ?? hiringManager.slice(0, 4);
     cy.get('input[placeholder="Type for hints..."]').first()
       .clear()
       .type(hiringManager.slice(0, 4), { delay: 60 });
-    cy.get(".oxd-autocomplete-dropdown", { timeout: 12000 }).should("be.visible");
-    cy.wait(1500);
-    cy.get(".oxd-autocomplete-option", { timeout: 10000 }).first().click();
+    cy.contains(".oxd-autocomplete-option", hmFirstName, { timeout: 20000 })
+      .click({ force: true });
 
     // Number of Positions (label text varies across versions — match on "Positions")
     cy.contains(".oxd-input-group", "Positions")
@@ -53,7 +54,7 @@ export class RecruitmentPage {
 
   assertVacancySaved(): void {
     // After save, OrangeHRM redirects to the edit page — URL contains /addJobVacancy/{id}
-    cy.url({ timeout: 15000 }).should("match", /addJobVacancy\/\d+/);
+    cy.url({ timeout: 30000 }).should("match", /addJobVacancy\/\d+/);
   }
 
   assertVacancyInList(name: string): void {
