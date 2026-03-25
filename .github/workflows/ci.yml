@@ -168,6 +168,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-ui, test-api, test-performance, test-security]
     if: always()
+    permissions:
+      pages: write
+      id-token: write
 
     steps:
       - name: Checkout code
@@ -230,9 +233,19 @@ jobs:
             printf '%s\n' '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Allure</title></head><body><p>No Allure result files were collected. Check Cypress jobs and <code>allure-results</code> uploads.</p></body></html>' > allure-report/index.html
           fi
 
-      - name: Upload Allure report
+      - name: Upload Allure report artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
           path: allure-report/
+
+      - name: Upload to GitHub Pages
+        if: always()
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: allure-report/
+
+      - name: Deploy to GitHub Pages
+        if: always()
+        uses: actions/deploy-pages@v4
