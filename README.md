@@ -1,6 +1,6 @@
 # OrangeHRM Automation Framework
 
-End-to-end test automation framework for [OrangeHRM](https://opensource-demo.orangehrmlive.com) built with Cypress and TypeScript.
+End-to-end test automation framework for [OrangeHRM](https://opensource-demo.orangehrmlive.com) built with Cypress and TypeScript.1
 
 ---
 
