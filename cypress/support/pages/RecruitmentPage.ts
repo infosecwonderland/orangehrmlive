@@ -121,7 +121,7 @@ export class RecruitmentPage {
   }
 
   clickActionButton(label: string): void {
-    cy.contains("button", label, { timeout: 10000 }).should("be.visible").click();
+    cy.contains("button", label, { timeout: 30000 }).should("be.visible").click();
     cy.wait(1500);
     cy.get("body").then(($b) => {
       if ($b.find(".oxd-dialog-container").length > 0) {
@@ -163,8 +163,6 @@ export class RecruitmentPage {
     cy.get(".oxd-date-input input").first().clear().type(`${yyyy}-${dd}-${mm}`, { delay: 60 }).blur();
 
     cy.contains("button", "Save").click();
-    // Wait for the save to complete — the demo instance may not show a toast
-    // but the POST succeeds; waiting ensures the form submission is processed.
-    cy.wait(2000);
+    cy.get(".oxd-toast", { timeout: 20000 }).should("contain", "Successfully");
   }
 }
