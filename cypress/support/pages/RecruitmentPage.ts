@@ -11,8 +11,9 @@ export class RecruitmentPage {
   }
 
   openCandidates(): void {
-    cy.contains(".oxd-topbar-body-nav a", "Candidates").click();
+    cy.visit("/web/index.php/recruitment/viewCandidates");
     cy.url({ timeout: 20000 }).should("include", "/viewCandidates");
+    cy.get(".oxd-table", { timeout: 15000 }).should("be.visible");
   }
 
   // ── Vacancies ───────────────────────────────────────────────────────────────
