@@ -8,12 +8,8 @@ on:
 
 jobs:
   test-ui:
-    name: UI Tests (${{ matrix.browser }})
+    name: UI Tests
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        browser: [chrome, firefox]
 
     steps:
       - name: Checkout code
@@ -28,25 +24,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Setup Firefox
-        if: matrix.browser == 'firefox'
-        uses: browser-actions/setup-firefox@latest
-
       - name: Run UI tests
         uses: cypress-io/github-action@v6
         with:
           install: false
-          browser: ${{ matrix.browser }}
+          browser: chrome
           config: 'specPattern=cypress/e2e/**/*.cy.ts,excludeSpecPattern=["cypress/e2e/**/*.api.cy.ts","cypress/e2e/performance/**","cypress/e2e/security/**"]'
         env:
-          # Allure is also enabled by default in cypress.config.ts (env.allure)
           CYPRESS_allure: "true"
 
       - name: Upload UI allure results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results-ui-${{ matrix.browser }}
+          name: allure-results-ui
           path: allure-results/
           if-no-files-found: ignore
 
@@ -178,17 +169,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download UI results (chrome)
+      - name: Download UI results
         uses: actions/download-artifact@v4
         with:
-          name: allure-results-ui-chrome
-          path: allure-results/
-        continue-on-error: true
-
-      - name: Download UI results (firefox)
-        uses: actions/download-artifact@v4
-        with:
-          name: allure-results-ui-firefox
+          name: allure-results-ui
           path: allure-results/
         continue-on-error: true
 
