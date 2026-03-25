@@ -8,8 +8,18 @@ on:
 
 jobs:
   test-ui:
-    name: UI Tests
+    name: UI Tests (${{ matrix.spec }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        spec:
+          - cypress/e2e/auth/auth-navigation.cy.ts
+          - cypress/e2e/integrity/data-validation.ui.cy.ts
+          - cypress/e2e/leave/leave-lifecycle.ui.cy.ts
+          - cypress/e2e/navigation/navigation-ui.cy.ts
+          - cypress/e2e/pim/pim-employee.cy.ts
+          - cypress/e2e/recruitment/recruitment-lifecycle.ui.cy.ts
 
     steps:
       - name: Checkout code
@@ -29,7 +39,7 @@ jobs:
         with:
           install: false
           browser: chrome
-          config: 'specPattern=cypress/e2e/**/*.cy.ts,excludeSpecPattern=["cypress/e2e/**/*.api.cy.ts","cypress/e2e/performance/**","cypress/e2e/security/**"]'
+          spec: ${{ matrix.spec }}
         env:
           CYPRESS_allure: "true"
 
@@ -37,7 +47,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results-ui
+          name: allure-results-ui-${{ strategy.job-index }}
           path: allure-results/
           if-no-files-found: ignore
 
@@ -172,8 +182,9 @@ jobs:
       - name: Download UI results
         uses: actions/download-artifact@v4
         with:
-          name: allure-results-ui
+          pattern: allure-results-ui-*
           path: allure-results/
+          merge-multiple: true
         continue-on-error: true
 
       - name: Download API results
