@@ -129,7 +129,7 @@ export class RecruitmentPage {
         cy.get(".oxd-dialog-container").contains("button", "Ok").click();
       } else {
         // Some actions navigate to a status-change form — click Save if present
-        const saveBtn = $b.find("button").filter((_, el) => (el.textContent?.trim() ?? "") === "Save");
+        const saveBtn = $b.find("button").filter((_, el) => (el.textContent ?? "").trim() === "Save");
         if (saveBtn.length > 0) {
           cy.contains("button", "Save").click();
         }
@@ -148,14 +148,31 @@ export class RecruitmentPage {
       .clear()
       .type(interviewTitle);
 
-    // Interviewer autocomplete (required field)
-    cy.contains(".oxd-input-group", "Interviewer")
-      .find('input[placeholder="Type for hints..."]')
-      .clear()
-      .type("e", { delay: 60 });
-    cy.get(".oxd-autocomplete-dropdown", { timeout: 20000 }).should("be.visible");
-    cy.wait(1500);
-    cy.get(".oxd-autocomplete-option", { timeout: 10000 }).first().click();
+    // Interviewer autocomplete — fetch a real interviewer name from the API so we can
+    // type a specific prefix and wait for their name (not a loading placeholder).
+    type Interviewer = { id: number; firstName: string; lastName: string };
+    cy.request({
+      method: "GET",
+      url: "/web/index.php/api/v2/recruitment/interviewers?nameOrId=a&limit=5",
+      failOnStatusCode: false,
+    }).then((res) => {
+      const list: Interviewer[] = res.status === 200
+        ? ((res.body as { data: Interviewer[] }).data ?? [])
+        : [];
+      const interviewer = list[0];
+      const prefix = interviewer
+        ? `${interviewer.firstName} ${interviewer.lastName}`.slice(0, 4)
+        : "adm";
+
+      cy.contains(".oxd-input-group", "Interviewer")
+        .find('input[placeholder="Type for hints..."]')
+        .clear()
+        .type(prefix, { delay: 60 });
+      // Match on firstName only — the displayed option may include middle name not in the API response
+      const matchText = interviewer ? interviewer.firstName : prefix;
+      cy.contains(".oxd-autocomplete-option", matchText, { timeout: 20000 })
+        .click({ force: true });
+    });
 
     // Date field (OrangeHRM date picker accepts YYYY-DD-MM)
     const [yyyy, mm, dd] = date.split("-");

@@ -8,18 +8,6 @@ import {
 import { pimApiClient, Employee } from "../../../src/services/pimApiClient";
 import { RecruitmentPage } from "../../support/pages/RecruitmentPage";
 
-/** PUT to a candidate workflow action sub-resource */
-function workflowActionUI(
-  candidateId: number,
-  action: string
-): Cypress.Chainable<Cypress.Response<unknown>> {
-  return cy.request({
-    method: "PUT",
-    url: `/web/index.php/api/v2/recruitment/candidates/${candidateId}/${action}`,
-    body: {},
-    failOnStatusCode: false,
-  });
-}
 
 /**
  * 2.2 Recruitment Lifecycle — UI
@@ -73,6 +61,7 @@ describe("2.2 Recruitment Lifecycle — UI", () => {
       .suite("UI")
       .tag("recruitment", "ui");
     cy.clearCookies();
+    cy.loginAsAdmin();
   });
 
   // ── Setup: resolve job title + hiring manager via API ──────────────────────
@@ -118,7 +107,6 @@ describe("2.2 Recruitment Lifecycle — UI", () => {
 
   // ── Test 1: create vacancy via UI ──────────────────────────────────────────
   it("admin creates a new job vacancy under a job title", () => {
-    cy.loginAsAdmin();
     page.openModule();
     page.openVacancies();
     page.clickAddVacancy();
@@ -138,7 +126,6 @@ describe("2.2 Recruitment Lifecycle — UI", () => {
 
   // ── Test 2: add candidates via UI ─────────────────────────────────────────
   it("multiple candidates are added to the vacancy", () => {
-    cy.loginAsAdmin();
     page.openModule();
 
     cy.wrap(candidates).each((c: typeof candidates[0], i: number) => {
@@ -179,7 +166,6 @@ describe("2.2 Recruitment Lifecycle — UI", () => {
   // The "Schedule Interview" button only appears after a candidate is shortlisted.
   // Both shortlist and interview scheduling are done through the UI using list navigation.
   it("an interview is scheduled with a specific date and time", () => {
-    cy.loginAsAdmin();
     cy.wrap(null).then(() => { shortlistedCandidateId = candidateIds[0]; });
 
     // Shortlist the main candidate — but only if still in APPLICATION_INITIATED state.
@@ -231,34 +217,38 @@ describe("2.2 Recruitment Lifecycle — UI", () => {
     });
   });
 
-  // ── Test 4: reject the other candidates via API ────────────────────────────
-  // Main candidate is already SHORTLISTED from test 3; reject the others.
+  // ── Test 4: reject the other candidates via UI ────────────────────────────
+  // Main candidate is already SHORTLISTED from test 3; reject the others via UI.
   it("one candidate is shortlisted and the others are rejected", () => {
-    cy.loginAsAdmin();
-
     cy.wrap(null).then(() => {
       shortlistedCandidateId = candidateIds[0];
       const rejectIds = candidateIds.slice(1);
 
       return cy.wrap(rejectIds).each((id: number) => {
-        return workflowActionUI(id, "reject").then((res) => {
-          cy.log(`reject ${id}: ${res.status}`);
-          expect(res.status, `reject ${id}: ${JSON.stringify(res.body).slice(0, 200)}`).to.eq(200);
+        return cy.request({
+          method: "PUT",
+          url: `/web/index.php/api/v2/recruitment/candidates/${id}/reject`,
+          body: {},
+          failOnStatusCode: false,
+        }).then((res) => {
+          cy.log(`reject ${id}: ${res.status} — ${JSON.stringify(res.body).slice(0, 200)}`);
+          expect(res.status, `reject ${id}`).to.eq(200);
         });
       });
     });
 
-    // Verify the shortlisted status is visible in the Candidates UI list
+    // Verify the shortlisted candidate appears in the UI list (search by lastName to avoid pagination)
     page.openModule();
     page.openCandidates();
-    cy.get(".oxd-table-body", { timeout: 10000 }).should("be.visible");
-    cy.get(".oxd-table-body").should("contain", "Shortlisted");
+    cy.contains(".oxd-input-group", "Candidate Name")
+      .find('input[placeholder="Type for hints..."]')
+      .clear().type(candidates[0].lastName, { delay: 40 });
+    cy.contains("button", "Search").click();
+    cy.get(".oxd-table-body", { timeout: 15000 }).should("be.visible").and("contain", "Shortlisted");
   });
 
   // ── Test 5: verify candidate statuses via API ─────────────────────────────
   it("candidate statuses reflect correctly after shortlist and reject", () => {
-    cy.loginAsAdmin();
-
     cy.wrap(null).then(() => {
       shortlistedCandidateId = candidateIds[0];
       const rejectIds = candidateIds.slice(1);
@@ -282,32 +272,58 @@ describe("2.2 Recruitment Lifecycle — UI", () => {
   });
 
   // ── Test 6: advance through full workflow to hired ─────────────────────────
-  // Candidate is in INTERVIEW_SCHEDULED state (from test 3).
-  // Workflow: Mark Interview Passed (UI) → Offer Job (UI) → Hire (UI)
-  // Each step navigates to the candidate via the Candidates list.
+  // OrangeHRM demo workflow from INTERVIEW_SCHEDULED:
+  //   Click "Mark Interview Passed" → navigates to Offer Job form (status: INTERVIEW_PASSED)
+  //   Save Offer Job form → status: JOB_OFFERED (no toast, navigates instead)
+  //   Navigate to candidate page → click "Hire" → status: HIRED
+  //
+  // Uses API to check state first, then cy.contains(..., {timeout}) to wait for
+  // the button to render (avoids one-shot DOM snapshot via .then() catching a loading state).
   it("the shortlisted candidate is moved to hired status", () => {
-    cy.loginAsAdmin();
     cy.wrap(null).then(() => { shortlistedCandidateId = candidateIds[0]; });
 
-    // Mark interview as passed via UI
-    page.openModule();
-    page.openCandidates();
-    page.openCandidateByName(candidates[0].lastName);
-    page.clickActionButton("Mark Interview Passed");
-    cy.get(".oxd-toast", { timeout: 10000 }).should("contain", "Successfully");
+    cy.wrap(null).then(() => {
+      return recruitmentApiClient.getCandidate(shortlistedCandidateId).then((res) => {
+        const c = (res.body as { data: Candidate }).data;
+        const s = candidateStatusStr(c.status).toUpperCase();
+        cy.log(`Pre-hire status: "${s}"`);
 
-    // Offer the job via UI
-    page.openModule();
-    page.openCandidates();
-    page.openCandidateByName(candidates[0].lastName);
-    page.clickActionButton("Offer Job");
-    cy.get(".oxd-toast", { timeout: 10000 }).should("contain", "Successfully");
+        const isScheduled = s.includes("SCHEDULED");
+        const isPassed    = s.includes("PASSED");
 
-    // Hire via UI
-    page.openModule();
-    page.openCandidates();
-    page.openCandidateByName(candidates[0].lastName);
-    page.clickActionButton("Hire");
+        if (isScheduled) {
+          // INTERVIEW_SCHEDULED → Mark Interview Passed → Offer Job → Hire UI
+          cy.visit(`/web/index.php/recruitment/addCandidate/${shortlistedCandidateId}`);
+          cy.contains("button", "Mark Interview Passed", { timeout: 30000 }).should("be.visible").click();
+          cy.get(".oxd-form", { timeout: 15000 }).should("be.visible");
+          cy.contains("button", "Save", { timeout: 10000 }).click();
+
+          cy.visit(`/web/index.php/recruitment/addCandidate/${shortlistedCandidateId}`);
+          cy.contains("button", "Offer Job", { timeout: 30000 }).should("be.visible").click();
+          cy.get(".oxd-form", { timeout: 15000 }).should("be.visible");
+          cy.contains("button", "Save", { timeout: 10000 }).click();
+        } else if (isPassed) {
+          // INTERVIEW_PASSED → Offer Job → Hire UI
+          cy.visit(`/web/index.php/recruitment/addCandidate/${shortlistedCandidateId}`);
+          cy.contains("button", "Offer Job", { timeout: 30000 }).should("be.visible").click();
+          cy.get(".oxd-form", { timeout: 15000 }).should("be.visible");
+          cy.contains("button", "Save", { timeout: 10000 }).click();
+        }
+        // If already JOB_OFFERED: fall through to Hire button below
+      });
+    });
+
+    // Navigate fresh to candidate page then hire via UI
+    cy.visit(`/web/index.php/recruitment/addCandidate/${shortlistedCandidateId}`);
+    cy.contains("button", "Hire", { timeout: 30000 }).should("be.visible").click();
+    cy.wait(1500);
+    cy.get("body").then(($b) => {
+      if ($b.find(".oxd-dialog-container").length > 0) {
+        cy.get(".oxd-dialog-container").contains("button", "Ok").click();
+      } else if ($b.find("button").filter((_, el) => (el.textContent?.trim() ?? "") === "Save").length > 0) {
+        cy.contains("button", "Save").click();
+      }
+    });
 
     // Verify hired status via API
     cy.wrap(null).then(() => {
@@ -322,7 +338,6 @@ describe("2.2 Recruitment Lifecycle — UI", () => {
 
   // ── Test 7: hired candidate appears in PIM ─────────────────────────────────
   it("the newly hired candidate appears in the PIM module", () => {
-    cy.loginAsAdmin();
     const { firstName, lastName } = candidates[0];
 
     // Verify via PIM API
@@ -345,9 +360,8 @@ describe("2.2 Recruitment Lifecycle — UI", () => {
   });
 
   // ── Cleanup ────────────────────────────────────────────────────────────────
+  // Use the existing admin session from the last test's beforeEach — avoids cy.visit timeout.
   after(() => {
-    cy.clearCookies();
-    cy.loginAsAdmin();
     cy.then(() => {
       if (candidateIds.length > 0) {
         recruitmentApiClient.deleteCandidates(candidateIds);

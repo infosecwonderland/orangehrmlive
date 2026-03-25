@@ -251,33 +251,61 @@ describe("2.2 Recruitment Lifecycle — API", () => {
   });
 
   // ── Test 6: advance through workflow to hired ──────────────────────────────
-  // Uses UI to mark interview passed and offer job (no API endpoints on demo),
-  // then uses API to complete the hire step.
+  // OrangeHRM demo workflow from INTERVIEW_SCHEDULED:
+  //   Click "Mark Interview Passed" → navigates to Offer Job form (status: INTERVIEW_PASSED)
+  //   Save Offer Job form → status: JOB_OFFERED (no toast, navigates instead)
+  //   API hire (PUT /hire) → status: HIRED
+  //
+  // Uses API to check state first, then cy.contains(..., {timeout}) to wait for
+  // the button to render (avoids one-shot DOM snapshot via .then() catching a loading state).
   it("the shortlisted candidate is moved to hired status", () => {
-    // Mark interview as passed via UI
-    cy.visit(`/web/index.php/recruitment/addCandidate/${mainCandidateId}`);
-    cy.get(".oxd-form", { timeout: 15000 }).should("be.visible");
-    page.clickActionButton("Mark Interview Passed");
-    cy.get(".oxd-toast", { timeout: 10000 }).should("contain", "Successfully");
+    cy.wrap(null).then(() => {
+      return recruitmentApiClient.getCandidate(mainCandidateId).then((res) => {
+        const c = (res.body as { data: Candidate }).data;
+        const s = candidateStatusStr(c.status).toUpperCase();
+        cy.log(`Pre-hire status: ${s}`);
 
-    // Offer the job via UI
-    cy.visit(`/web/index.php/recruitment/addCandidate/${mainCandidateId}`);
-    cy.get(".oxd-form", { timeout: 15000 }).should("be.visible");
-    page.clickActionButton("Offer Job");
-    cy.get(".oxd-toast", { timeout: 10000 }).should("contain", "Successfully");
+        const isScheduled = s.includes("SCHEDULED");
+        const isPassed    = s.includes("PASSED");
 
-    // Hire via API (PUT /hire — confirmed to exist; works from JOB_OFFERED state)
-    workflowAction(mainCandidateId, "hire").then((res) => {
-      cy.log(`hire: ${res.status} — ${bodyStr(res.body)}`);
-      expect(res.status, `hire: ${bodyStr(res.body)}`).to.eq(200);
+        if (isScheduled) {
+          // INTERVIEW_SCHEDULED → Mark Interview Passed → Offer Job → hire
+          cy.visit(`/web/index.php/recruitment/addCandidate/${mainCandidateId}`);
+          cy.contains("button", "Mark Interview Passed", { timeout: 30000 }).should("be.visible").click();
+          cy.get(".oxd-form", { timeout: 15000 }).should("be.visible");
+          cy.contains("button", "Save", { timeout: 10000 }).click();
+
+          cy.visit(`/web/index.php/recruitment/addCandidate/${mainCandidateId}`);
+          cy.contains("button", "Offer Job", { timeout: 30000 }).should("be.visible").click();
+          cy.get(".oxd-form", { timeout: 15000 }).should("be.visible");
+          cy.contains("button", "Save", { timeout: 10000 }).click();
+        } else if (isPassed) {
+          // INTERVIEW_PASSED → Offer Job → hire
+          cy.visit(`/web/index.php/recruitment/addCandidate/${mainCandidateId}`);
+          cy.contains("button", "Offer Job", { timeout: 30000 }).should("be.visible").click();
+          cy.get(".oxd-form", { timeout: 15000 }).should("be.visible");
+          cy.contains("button", "Save", { timeout: 10000 }).click();
+        }
+        // If already JOB_OFFERED: fall through to hire API below
+      });
+    });
+
+    // Hire via API (PUT /hire — works from JOB_OFFERED state)
+    cy.wrap(null).then(() => {
+      return workflowAction(mainCandidateId, "hire").then((res) => {
+        cy.log(`hire: ${res.status} — ${bodyStr(res.body)}`);
+        expect(res.status, `hire: ${bodyStr(res.body)}`).to.eq(200);
+      });
     });
 
     // Verify hired status via API
-    recruitmentApiClient.getCandidate(mainCandidateId).then((res) => {
-      const c = (res.body as { data: Candidate }).data;
-      const s = candidateStatusStr(c.status).toUpperCase();
-      cy.log(`Status after hire: ${s}`);
-      expect(s, "candidate should be HIRED").to.include("HIRE");
+    cy.wrap(null).then(() => {
+      return recruitmentApiClient.getCandidate(mainCandidateId).then((res) => {
+        const c = (res.body as { data: Candidate }).data;
+        const s = candidateStatusStr(c.status).toUpperCase();
+        cy.log(`Status after hire: ${s}`);
+        expect(s, "candidate should be HIRED").to.include("HIRE");
+      });
     });
   });
 
@@ -294,9 +322,8 @@ describe("2.2 Recruitment Lifecycle — API", () => {
   });
 
   // ── Cleanup ────────────────────────────────────────────────────────────────
+  // Use the existing admin session from the last test's beforeEach — avoids cy.visit timeout.
   after(() => {
-    cy.clearCookies();
-    cy.loginAsAdmin();
     cy.then(() => {
       if (candidateIds.length > 0) recruitmentApiClient.deleteCandidates(candidateIds);
       if (vacancyId !== undefined) recruitmentApiClient.deleteVacancy(vacancyId);
